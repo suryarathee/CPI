@@ -1,0 +1,13 @@
+parquet_data/
+*.parquet
+*.csv
+*.db
+*.h5
+build/
+.cache/
+*.exe
+__pycache__/
+*.pyc
+.env
+venv/
+env/
