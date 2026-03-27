@@ -1,0 +1,10 @@
+^C:\USERS\RATHE\DESKTOP\ET\CPI\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/rathe/Desktop/ET/CPI -BC:/Users/rathe/Desktop/ET/CPI/build --check-stamp-file C:/Users/rathe/Desktop/ET/CPI/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

@@ -1,0 +1,40 @@
+services:
+  kafka:
+    image: apache/kafka:latest
+    container_name: nse_kafka
+    ports:
+      - "9092:9092"
+    environment:
+      # Node and Role Configuration
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      # Networking Configuration (Handles Docker internal vs Windows Host)
+      KAFKA_LISTENERS: BROKER://:29092,EXTERNAL://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: BROKER://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: BROKER
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,BROKER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      # Single-Node Overrides
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka_data:/tmp/kraft-combined-logs
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: nse_kafka_ui
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: Local-NSE-Cluster
+      # Notice this points to the internal Docker listener port
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    depends_on:
+      - kafka
+
+volumes:
+  kafka_data:
+    name: nse_kafka_data

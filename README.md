@@ -1,2 +1,1 @@
-# CPI
-Initilal commit
+Initial commit
