@@ -37,8 +37,8 @@ def main():
                 print(f"[WARNING] No data found for {clean_symbol}.")
                 continue
             df.reset_index(inplace=True)
-            df = df[['Datetime', 'Close', 'Volume']].copy()
-            df.columns = ['timestamp', 'price', 'volume']
+            df = df[['Datetime', 'Open', 'High', 'Low', 'Close', 'Volume']].copy()
+            df.columns = ['timestamp','open','high','low','close', 'volume']
             df['symbol'] = clean_symbol
             file_path = f"parquet_data/{clean_symbol}.parquet"
             df.to_parquet(file_path, engine='pyarrow')

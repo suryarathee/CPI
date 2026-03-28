@@ -8,7 +8,7 @@ from confluent_kafka import Producer
 KAFKA_BROKER = 'localhost:9092'
 TOPIC = 'nse_live_candles'  # Changed topic name to reflect we are sending candles now
 DATA_DIR = 'parquet_data'
-STREAM_SPEED = 0.0001  # Half a second per candle (Fast enough for a good demo)
+STREAM_SPEED = 0.5  # Half a second per candle (Fast enough for a good demo)
 
 
 def main():
@@ -51,25 +51,27 @@ def main():
     # --- STREAM THE LAST 10 DAYS ---
     try:
         for index, row in live_df.iterrows():
-            # Send the completed 5-minute candle
             payload = {
                 "symbol": row['symbol'],
                 "timestamp": str(row['timestamp']),
-                "price": float(row['price']),
+                "open": float(row['open']),
+                "high": float(row['high']),
+                "low": float(row['low']),
+                "close": float(row['close']),
                 "volume": float(row['volume'])
             }
 
             producer.produce(TOPIC, json.dumps(payload))
             producer.poll(0)
 
-            print(f"📡 Streamed -> {payload['symbol']} | {payload['timestamp']} | ₹{payload['price']:.2f}")
+            print(f"Streamed -> {payload['symbol']} | {payload['timestamp']} | ₹{payload['close']:.2f}")
             time.sleep(STREAM_SPEED)
 
     except KeyboardInterrupt:
         print("\n[SYSTEM] Stream halted.")
 
     producer.flush()
-    print("\n✅ [SYSTEM] Stream complete.")
+    print("\n[SYSTEM] Stream complete.")
 
 
 if __name__ == "__main__":
