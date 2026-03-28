@@ -574,7 +574,6 @@ class TradingTerminal(QMainWindow):
             self._append_candle(o, h, l, c, v, parsed_time)
         self.ticker_bar.update(o, h, l, c, v)
 
-        # Incremental updates preserve current pan/zoom; avoid full chart reset.
         bar = pd.Series(
             {
                 "time": parsed_time,
