@@ -8,13 +8,30 @@ from confluent_kafka import Producer
 KAFKA_BROKER = 'localhost:9092'
 TOPIC = 'nse_live_candles'  # Changed topic name to reflect we are sending candles now
 DATA_DIR = 'parquet_data'
-STREAM_SPEED = 0.5  # Half a second per candle (Fast enough for a good demo)
+STREAM_SPEED = 0.01  # Half a second per candle (Fast enough for a good demo)
+START_SIGNAL_FILE = ".stream_start.signal"
+
+
+def wait_for_start_signal():
+    print("\n[READY] Waiting for start signal from the PyQt test-run button...")
+    print(f"[HINT] Click 'START TEST RUN' in the PyQt window to begin.\n")
+
+    while not os.path.exists(START_SIGNAL_FILE):
+        time.sleep(0.2)
+
+    try:
+        os.remove(START_SIGNAL_FILE)
+    except OSError:
+        pass
 
 
 def main():
     print("==================================================")
     print("🚀 INSTITUTIONAL REPLAY ENGINE: 50/10 SPLIT")
     print("==================================================")
+
+    if os.path.exists(START_SIGNAL_FILE):
+        os.remove(START_SIGNAL_FILE)
 
     all_dataframes = []
     for file in os.listdir(DATA_DIR):
@@ -45,8 +62,7 @@ def main():
     print(f" -> Live Stream Queue (10 Days) ready: {len(live_df)} candles.\n")
 
     producer = Producer({'bootstrap.servers': KAFKA_BROKER})
-    print("\n[READY] Press ENTER to begin streaming the final 10 days...")
-    input()
+    wait_for_start_signal()
 
     # --- STREAM THE LAST 10 DAYS ---
     try:

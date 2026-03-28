@@ -12,10 +12,14 @@ from google.genai import types
 
 from adk_swarm.sub_agents.pattern_analyst.agent import pattern_analyst_agent
 from adk_swarm.sub_agents.risk_analyst.agent import risk_analyst_agent
+from env_loader import load_local_env
+
+
+load_local_env()
 
 
 APP_NAME = "trading_terminal_swarm"
-MODEL_NAME = "gemini-2.0-flash"
+MODEL_NAME = "gemini-2.5-pro"
 
 
 root_agent = LlmAgent(
@@ -23,9 +27,9 @@ root_agent = LlmAgent(
     description="Coordinates technical and risk specialists, then synthesizes one plain-English trade alert.",
     model=MODEL_NAME,
     instruction=(
-        "You are the lead coordinator for an algorithmic trading terminal. "
+        " wYou are the lead coordinator for an algorithmic trading terminal. "
         "Always consult the pattern_analyst and risk_analyst tools before responding. "
-        "Synthesize their outputs with the supplied historical win rate into a plain-English trade alert. "
+        "Synthesize their outputs with the supplied historicalin rate into a plain-English trade alert. "
         "Your response must be crisp, objective, and directly actionable for a trader. "
         "Mention the pattern, current price, historical win rate, and the risk plan."
     ),

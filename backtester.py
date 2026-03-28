@@ -49,6 +49,11 @@ def run_historical_backtest(
     wins = 0
     losses = 0
     total_trades = 0
+    total_bars_to_exit = 0
+    max_win_streak = 0
+    max_loss_streak = 0
+    current_win_streak = 0
+    current_loss_streak = 0
 
     for index in range(len(df)):
         window = df.iloc[max(0, index - window_size + 1): index + 1]
@@ -69,10 +74,12 @@ def run_historical_backtest(
         stop_loss = entry_price * (1 - stop_loss_pct)
 
         trade_outcome = None
+        bars_to_exit = 0
         for future_index in range(index + 1, len(df)):
             future_row = df.iloc[future_index]
             candle_high = float(future_row["high"])
             candle_low = float(future_row["low"])
+            bars_to_exit = future_index - index
 
             if candle_low <= stop_loss and candle_high >= take_profit:
                 trade_outcome = "loss"
@@ -88,15 +95,37 @@ def run_historical_backtest(
             continue
 
         total_trades += 1
+        total_bars_to_exit += bars_to_exit
         if trade_outcome == "win":
             wins += 1
+            current_win_streak += 1
+            current_loss_streak = 0
+            max_win_streak = max(max_win_streak, current_win_streak)
         else:
             losses += 1
+            current_loss_streak += 1
+            current_win_streak = 0
+            max_loss_streak = max(max_loss_streak, current_loss_streak)
 
     win_rate = (wins / total_trades) if total_trades else 0.0
+    loss_rate = (losses / total_trades) if total_trades else 0.0
+    avg_bars_to_exit = (total_bars_to_exit / total_trades) if total_trades else 0.0
+    expectancy_pct = (
+        (win_rate * take_profit_pct) - (loss_rate * stop_loss_pct)
+    ) if total_trades else 0.0
+    net_return_pct = expectancy_pct * total_trades
     return {
         "win_rate": float(win_rate),
         "total_trades": int(total_trades),
         "wins": int(wins),
         "losses": int(losses),
+        "loss_rate": float(loss_rate),
+        "avg_bars_to_exit": float(avg_bars_to_exit),
+        "expectancy_pct": float(expectancy_pct),
+        "net_return_pct": float(net_return_pct),
+        "risk_reward_ratio": float(take_profit_pct / stop_loss_pct) if stop_loss_pct else 0.0,
+        "max_win_streak": int(max_win_streak),
+        "max_loss_streak": int(max_loss_streak),
+        "take_profit_pct": float(take_profit_pct),
+        "stop_loss_pct": float(stop_loss_pct),
     }

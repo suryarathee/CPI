@@ -2,7 +2,7 @@ from google.adk.agents import LlmAgent
 from google.genai import types
 
 
-MODEL_NAME = "gemini-2.0-flash"
+MODEL_NAME = "gemini-2.5-pro"
 
 
 pattern_analyst_agent = LlmAgent(
