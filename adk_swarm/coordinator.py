@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
+from html import escape
+from typing import Any
 
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
@@ -10,8 +12,7 @@ from google.adk.sessions import InMemorySessionService
 from google.adk.tools.agent_tool import AgentTool
 from google.genai import types
 
-from adk_swarm.sub_agents.pattern_analyst.agent import pattern_analyst_agent
-from adk_swarm.sub_agents.risk_analyst.agent import risk_analyst_agent
+from adk_swarm.sub_agents.trade_analyst import trade_analyst_agent
 from env_loader import load_local_env
 
 
@@ -23,44 +24,19 @@ MODEL_NAME = "gemini-2.5-pro"
 
 
 root_agent = LlmAgent(
-    name="trade_event_coordinator",
-    description="Coordinates technical and risk specialists, then synthesizes one plain-English trade alert.",
+    name="trade_alert_coordinator",
+    description="Routes technical context to the trade analyst and returns a 3-bullet trade alert for the UI.",
     model=MODEL_NAME,
     instruction=(
-        " wYou are the lead coordinator for an algorithmic trading terminal. "
-        "Always consult the pattern_analyst and risk_analyst tools before responding. "
-        "Synthesize their outputs with the supplied historicalin rate into a plain-English trade alert. "
-        "Your response must be crisp, objective, and directly actionable for a trader. "
-        "Mention the pattern, current price, historical win rate, and the risk plan."
+        "You coordinate an algorithmic trading terminal. "
+        "Use the trade_analyst tool before producing a response. "
+        "Return exactly three plain-English bullet points for a retail trader. "
+        "Bullet 1: what triggered. Bullet 2: what the historical edge says. Bullet 3: the practical risk view. "
+        "Stay objective and never promise outcomes."
     ),
-    tools=[
-        AgentTool(pattern_analyst_agent),
-        AgentTool(risk_analyst_agent),
-    ],
+    tools=[AgentTool(trade_analyst_agent)],
     generate_content_config=types.GenerateContentConfig(temperature=0.2),
 )
-
-
-def _build_request(symbol: str, current_price: float, pattern_name: str, win_rate: float) -> str:
-    return (
-        f"Symbol: {symbol}\n"
-        f"Current price: {current_price:.2f}\n"
-        f"Pattern: {pattern_name}\n"
-        f"Historical win rate from backtester: {win_rate:.2%}\n"
-        "Consult the specialist tools and produce a single plain-English trade alert."
-    )
-
-
-def _fallback_alert(symbol: str, current_price: float, pattern_name: str, win_rate: float, error: Exception) -> str:
-    risk_per_share = current_price * 0.01
-    stop_loss = current_price - risk_per_share
-    target = current_price + (2 * risk_per_share)
-    return (
-        f"{pattern_name} detected on {symbol} near {current_price:.2f}. "
-        f"Historical win rate is {win_rate:.2%}. "
-        f"Use a strict 1:2 plan with stop-loss near {stop_loss:.2f} and target near {target:.2f}. "
-        f"ADK synthesis fallback engaged because the coordinator call failed: {error}."
-    )
 
 
 def _has_adk_credentials() -> bool:
@@ -73,17 +49,47 @@ def _has_adk_credentials() -> bool:
     )
 
 
-async def _run_coordinator_async(symbol: str, current_price: float, pattern_name: str, win_rate: float) -> str:
+def _format_request(context_dict: dict[str, Any]) -> str:
+    indicator_context = context_dict.get("indicator_context", {})
+    edge = context_dict.get("edge", {})
+    return (
+        f"Symbol: {context_dict.get('symbol')}\n"
+        f"Price: {context_dict.get('price')}\n"
+        f"Screener setup: {context_dict.get('screener_signal')}\n"
+        f"Indicator-confirmed pattern: {context_dict.get('pattern_name')}\n"
+        f"Indicator context: {indicator_context}\n"
+        f"Historical edge stats: {edge}\n"
+        "Use the trade_analyst tool first, then produce exactly three bullet points."
+    )
+
+
+def _fallback_alert(context_dict: dict[str, Any], error: Exception | None = None) -> str:
+    symbol = context_dict.get("symbol", "UNKNOWN")
+    price = float(context_dict.get("price", 0.0) or 0.0)
+    pattern_name = context_dict.get("pattern_name", "Setup")
+    edge = context_dict.get("edge", {})
+    risk_buffer = price * 0.01
+    stop_loss = price - risk_buffer
+    take_profit = price + (risk_buffer * 2)
+    suffix = f" ADK fallback engaged: {error}." if error else ""
+    return (
+        f"- {symbol} triggered {pattern_name} near {price:.2f} after screener and indicator confirmation.\n"
+        f"- Historical edge: Win Rate {edge.get('Win Rate [%]', 0.0):.2f}%, Return {edge.get('Return [%]', 0.0):.2f}%, "
+        f"Max Drawdown {edge.get('Max. Drawdown [%]', 0.0):.2f}%, Trades {edge.get('# Trades', 0)}.\n"
+        f"- Trade only if risk is acceptable; a simple reference plan is stop near {stop_loss:.2f} and target near {take_profit:.2f}.{suffix}"
+    )
+
+
+async def _run_async(context_dict: dict[str, Any]) -> str:
     session_service = InMemorySessionService()
     runner = Runner(app_name=APP_NAME, agent=root_agent, session_service=session_service)
-
-    user_id = "terminal"
+    user_id = "dashboard"
     session_id = str(uuid.uuid4())
     await session_service.create_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
 
     message = types.Content(
         role="user",
-        parts=[types.Part.from_text(text=_build_request(symbol, current_price, pattern_name, win_rate))],
+        parts=[types.Part.from_text(text=_format_request(context_dict))],
     )
 
     try:
@@ -99,18 +105,21 @@ async def _run_coordinator_async(symbol: str, current_price: float, pattern_name
         await runner.close()
 
 
-def analyze_trade_event(symbol, current_price, pattern_name, win_rate):
+def generate_ui_alert(context_dict: dict[str, Any]) -> str:
     if not _has_adk_credentials():
-        return _fallback_alert(
-            symbol,
-            current_price,
-            pattern_name,
-            win_rate,
-            RuntimeError("missing Google ADK credentials"),
-        )
+        return _fallback_alert(context_dict, RuntimeError("missing Google ADK credentials"))
 
     try:
-        final_text = asyncio.run(_run_coordinator_async(symbol, current_price, pattern_name, win_rate))
-        return final_text or _fallback_alert(symbol, current_price, pattern_name, win_rate, RuntimeError("empty ADK response"))
+        response = asyncio.run(_run_async(context_dict))
+        return response or _fallback_alert(context_dict, RuntimeError("empty ADK response"))
     except Exception as exc:
-        return _fallback_alert(symbol, current_price, pattern_name, win_rate, exc)
+        return _fallback_alert(context_dict, exc)
+
+
+def to_alert_html(alert_text: str) -> str:
+    safe = escape(alert_text).replace("\n", "<br>")
+    return (
+        "<div style='margin:0 0 12px 0;padding:10px 12px;background:#161B24;"
+        "border-left:3px solid #FF5733;border-radius:0 3px 3px 0;'>"
+        f"{safe}</div>"
+    )

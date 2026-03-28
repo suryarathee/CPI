@@ -49,8 +49,8 @@ st.markdown("""
       border-radius: 12px;
       padding: 16px 20px;
   }
-  [data-testid="stMetricLabel"]  { color: #8b949e; font-size: 0.8rem; }
-  [data-testid="stMetricValue"]  { color: #e6edf3; font-size: 1.6rem; font-weight: 700; }
+  [data-testid="stMetricLabel"]  { color: #8b949e; font-size: 1.1rem; }
+  [data-testid="stMetricValue"]  { color: #e6edf3; font-size: 2.2rem; font-weight: 700; }
   
   /* Multi-Agent Alert Box */
   .alert-box {
@@ -58,14 +58,14 @@ st.markdown("""
       border: 1px solid #58a6ff;
       border-left: 4px solid #58a6ff;
       border-radius: 8px;
-      padding: 14px 18px;
+      padding: 18px 22px;
       margin-bottom: 12px;
       animation: fadeIn 0.4s ease;
   }
-  .alert-title { font-weight: 700; color: #58a6ff; font-size: 1.1rem; margin-bottom: 8px;}
-  .agent-quant { color: #3fb950; font-size: 0.85rem; margin-bottom: 4px;}
-  .agent-risk { color: #f59e0b; font-size: 0.85rem; margin-bottom: 4px;}
-  .agent-editor { color: #e6edf3; font-size: 0.9rem; font-weight: 600; margin-top: 8px; border-top: 1px solid #30363d; padding-top: 8px;}
+  .alert-title { font-weight: 700; color: #58a6ff; font-size: 1.4rem; margin-bottom: 8px;}
+  .agent-quant { color: #3fb950; font-size: 1.1rem; margin-bottom: 4px;}
+  .agent-risk { color: #f59e0b; font-size: 1.1rem; margin-bottom: 4px;}
+  .agent-editor { color: #e6edf3; font-size: 1.2rem; font-weight: 600; margin-top: 8px; border-top: 1px solid #30363d; padding-top: 8px;}
   
   @keyframes fadeIn { from {opacity:0; transform:translateY(-4px);} to {opacity:1; transform:translateY(0);} }
 
@@ -73,11 +73,11 @@ st.markdown("""
   .dash-header {
       background: linear-gradient(90deg, #0d1117, #1a237e22);
       border-bottom: 1px solid #30363d;
-      padding: 18px 0 12px 0;
+      padding: 24px 0 16px 0;
       margin-bottom: 18px;
   }
   .dash-title {
-      font-size: 1.8rem;
+      font-size: 2.4rem;
       font-weight: 700;
       background: linear-gradient(90deg, #58a6ff, #bc8cff);
       -webkit-background-clip: text;

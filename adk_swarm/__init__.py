@@ -1,3 +1,3 @@
-from .coordinator import analyze_trade_event
+from .coordinator import generate_ui_alert, to_alert_html
 
-__all__ = ["analyze_trade_event"]
+__all__ = ["generate_ui_alert", "to_alert_html"]

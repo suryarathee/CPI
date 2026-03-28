@@ -29,6 +29,7 @@ from PyQt5.QtWidgets import (
 from backtester import run_historical_backtest
 from patterns import BullishEngulfing, VolumeBreakout
 from runtime_config import available_symbols, load_selection, save_selection
+from adk_swarm import generate_ui_alert
 
 try:
     from lightweight_charts.widgets import QtChart
@@ -71,14 +72,14 @@ QWidget {{
     background-color: transparent;
     color: {T['text']};
     font-family: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
-    font-size: 11px;
+    font-size: 14px;
 }}
 QPushButton {{
     background-color: {T['surface']};
     color: "#FFFFFF";
     border: 1px solid {T['border']};
-    border-radius: 3px;
-    padding: 5px 10px;
+    border-radius: 4px;
+    padding: 8px 16px;
 }}
 QPushButton:hover {{
     border-color: {T['border_hi']};
@@ -94,6 +95,7 @@ QTextEdit, QListWidget, QComboBox {{
     background-color: {T['surface']};
     border: 1px solid {T['border']};
     color: {T['text']};
+    padding: 4px;
 }}
 QTabWidget::pane {{
     border: 1px solid {T['border']};
@@ -103,8 +105,8 @@ QTabBar::tab {{
     background: {T['surface']};
     color: {T['text_dim']};
     border: 1px solid {T['border']};
-    padding: 7px 14px;
-    min-width: 120px;
+    padding: 10px 20px;
+    min-width: 150px;
 }}
 QTabBar::tab:selected {{
     background: {T['panel']};
@@ -122,7 +124,7 @@ QHeaderView::section {{
     background-color: {T['panel']};
     color: {T['text_bright']};
     border: 1px solid {T['border']};
-    padding: 4px;
+    padding: 8px;
 }}
 """
 
@@ -154,6 +156,86 @@ class KafkaWorker(QThread):
             consumer.close()
 
 
+class ScannerWorker(QThread):
+    def __init__(self, terminal: TradingTerminal):
+        super().__init__()
+        self.terminal = terminal
+
+    def run(self):
+        while True:
+            self.msleep(5000)  # Scan every 5 seconds
+            if not self.terminal.candle_data or not self.terminal.stream_started:
+                continue
+
+            # We use the focus symbol's current data for the live pattern detection
+            symbol = self.terminal.focus_symbol
+            df = pd.DataFrame(self.terminal.candle_data)
+            
+            # Identify which pattern triggered
+            triggered_pattern = None
+            for pattern in self.terminal.active_patterns:
+                res = pattern.evaluate(
+                    df['open'].tolist(),
+                    df['high'].tolist(),
+                    df['low'].tolist(),
+                    df['close'].tolist(),
+                    df['volume'].tolist()
+                )
+                if res:
+                    triggered_pattern = pattern
+                    break
+            
+            if triggered_pattern:
+                # 1. Get historical edge for this specific symbol/pattern
+                edge = run_historical_backtest(symbol, triggered_pattern)
+                
+                # 2. Generate the plain-English AI alert via Swarm
+                context = {
+                    "symbol": symbol,
+                    "price": float(df.iloc[-1]["close"]),
+                    "pattern_name": triggered_pattern.name,
+                    "edge": edge,
+                    "indicator_context": {
+                        "volume_surge": float(df.iloc[-1]["volume"] / df["volume"].tail(20).mean())
+                    }
+                }
+                
+                alert_text = generate_ui_alert(context)
+                
+                # Split the 3-bullet response into the format expected by the UI
+                bullets = [b.strip("- ") for b in alert_text.split("\n") if b.strip()]
+                
+                new_alert = {
+                    "event_id": f"{symbol}:{df.iloc[-1]['time']}",
+                    "symbol": symbol,
+                    "pattern": triggered_pattern.name,
+                    "timestamp": str(df.iloc[-1]["time"]),
+                    "quant": bullets[0] if len(bullets) > 0 else "Pattern confirmed by technicals.",
+                    "risk": bullets[1] if len(bullets) > 1 else "Monitor risk/reward closely.",
+                    "synthesis": bullets[2] if len(bullets) > 2 else "Trade quality assessment in progress."
+                }
+                
+                # Append to alerts.json
+                self._write_alert(new_alert)
+
+    def _write_alert(self, new_alert):
+        try:
+            alerts = []
+            if os.path.exists(ALERTS_FILE):
+                with open(ALERTS_FILE, "r", encoding="utf-8") as f:
+                    alerts = json.load(f)
+            
+            # Avoid duplicates
+            if any(a.get("event_id") == new_alert["event_id"] for a in alerts):
+                return
+
+            alerts.append(new_alert)
+            with open(ALERTS_FILE, "w", encoding="utf-8") as f:
+                json.dump(alerts, f, indent=2)
+        except Exception as exc:
+            print(f"[SCANNER ERROR] Failed to write alert: {exc}")
+
+
 class TradingTerminal(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -183,6 +265,9 @@ class TradingTerminal(QMainWindow):
         self.kafka_thread.new_candle_signal.connect(self.update_chart)
         self.kafka_thread.start()
 
+        self.scanner_thread = ScannerWorker(self)
+        self.scanner_thread.start()
+
         self.alert_timer = QTimer()
         self.alert_timer.timeout.connect(self.check_ai_alerts)
         self.alert_timer.start(1000)
@@ -195,19 +280,19 @@ class TradingTerminal(QMainWindow):
         root_layout.setSpacing(0)
 
         header = QWidget()
-        header.setFixedHeight(52)
+        header.setFixedHeight(72)
         header.setStyleSheet(f"background-color:{T['panel']}; border-bottom:1px solid {T['border']};")
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(14, 0, 14, 0)
+        header_layout.setContentsMargins(20, 0, 20, 0)
 
         self.title_label = QLabel("Agent Scanner")
         self.title_label.setStyleSheet(
-            f"color:{T['text_bright']}; font-size:13px; font-weight:bold; letter-spacing:1px;"
+            f"color:{T['text_bright']}; font-size:20px; font-weight:bold; letter-spacing:1px;"
         )
         header_layout.addWidget(self.title_label)
 
         self.status_label = QLabel("Idle")
-        self.status_label.setStyleSheet(f"color:{T['text_dim']}; font-size:10px;")
+        self.status_label.setStyleSheet(f"color:{T['text_dim']}; font-size:13px;")
         header_layout.addWidget(self.status_label)
         header_layout.addStretch()
 
@@ -236,22 +321,22 @@ class TradingTerminal(QMainWindow):
         middle_layout.addWidget(chart_column, 1)
 
         chart_header = QWidget()
-        chart_header.setFixedHeight(40)
+        chart_header.setFixedHeight(50)
         chart_header.setStyleSheet(f"background-color:{T['panel']}; border-bottom:1px solid {T['border']};")
         chart_header_layout = QHBoxLayout(chart_header)
-        chart_header_layout.setContentsMargins(12, 0, 12, 0)
+        chart_header_layout.setContentsMargins(15, 0, 15, 0)
 
         self.chart_symbol_label = QLabel(self.focus_symbol)
-        self.chart_symbol_label.setStyleSheet(f"color:{T['text_bright']}; font-size:12px; font-weight:bold;")
+        self.chart_symbol_label.setStyleSheet(f"color:{T['text_bright']}; font-size:16px; font-weight:bold;")
         chart_header_layout.addWidget(self.chart_symbol_label)
 
         self.chart_price_label = QLabel("--")
-        self.chart_price_label.setStyleSheet(f"color:{T['accent']}; font-size:12px; font-weight:bold;")
+        self.chart_price_label.setStyleSheet(f"color:{T['accent']}; font-size:16px; font-weight:bold;")
         chart_header_layout.addWidget(self.chart_price_label)
         chart_header_layout.addStretch()
 
         self.chart_info_label = QLabel("Waiting for stream")
-        self.chart_info_label.setStyleSheet(f"color:{T['text_dim']}; font-size:10px;")
+        self.chart_info_label.setStyleSheet(f"color:{T['text_dim']}; font-size:13px;")
         chart_header_layout.addWidget(self.chart_info_label)
 
         chart_layout.addWidget(chart_header)
@@ -266,7 +351,7 @@ class TradingTerminal(QMainWindow):
             background_color=T["panel"],
             text_color=T["text_dim"],
             font_family="Consolas",
-            font_size=11,
+            font_size=14,
         )
         self.qt_chart.grid(vert_enabled=True, horz_enabled=True, color="rgba(30,37,53,0.6)")
         self.qt_chart.candle_style(up_color=T["bull"], down_color=T["bear"])
@@ -281,29 +366,29 @@ class TradingTerminal(QMainWindow):
             color_based_on_candle=True,
         )
         self.ema_fast_line = self.qt_chart.create_line(
-            name="EMA 9", color=T["ema_fast"], width=1, price_line=False, price_label=False
+            name="EMA 9", color=T["ema_fast"], width=2, price_line=False, price_label=False
         )
         self.ema_slow_line = self.qt_chart.create_line(
-            name="EMA 21", color=T["ema_slow"], width=1, price_line=False, price_label=False
+            name="EMA 21", color=T["ema_slow"], width=2, price_line=False, price_label=False
         )
         chart_host_layout.addWidget(self.qt_chart.get_webview())
         chart_layout.addWidget(self.chart_host, 1)
 
         right_panel = QWidget()
-        right_panel.setFixedWidth(360)
+        right_panel.setFixedWidth(420)
         right_panel.setStyleSheet(f"background-color:{T['panel']}; border-left:1px solid {T['border']};")
         right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(12, 12, 12, 12)
-        right_layout.setSpacing(10)
+        right_layout.setContentsMargins(15, 15, 15, 15)
+        right_layout.setSpacing(12)
         middle_layout.addWidget(right_panel)
 
         scanner_label = QLabel("Scanner Controls")
-        scanner_label.setStyleSheet(f"color:{T['text_bright']}; font-size:11px; font-weight:bold;")
+        scanner_label.setStyleSheet(f"color:{T['text_bright']}; font-size:16px; font-weight:bold;")
         right_layout.addWidget(scanner_label)
 
         scanner_hint = QLabel("Select any symbols to scan in parallel. Focus controls the main chart.")
         scanner_hint.setWordWrap(True)
-        scanner_hint.setStyleSheet(f"color:{T['text_dim']}; font-size:10px;")
+        scanner_hint.setStyleSheet(f"color:{T['text_dim']}; font-size:13px;")
         right_layout.addWidget(scanner_hint)
 
         self.symbol_list = QListWidget()
@@ -316,7 +401,7 @@ class TradingTerminal(QMainWindow):
         focus_layout.setContentsMargins(0, 0, 0, 0)
         focus_layout.setSpacing(6)
         focus_label = QLabel("Focus")
-        focus_label.setStyleSheet(f"color:{T['text_dim']}; font-size:10px;")
+        focus_label.setStyleSheet(f"color:{T['text_dim']}; font-size:13px;")
         focus_layout.addWidget(focus_label)
         self.focus_combo = QComboBox()
         focus_layout.addWidget(self.focus_combo, 1)
@@ -331,7 +416,7 @@ class TradingTerminal(QMainWindow):
         self.apply_button.clicked.connect(self.apply_symbol_selection)
         button_layout.addWidget(self.apply_button)
         self.selection_status = QLabel("")
-        self.selection_status.setStyleSheet(f"color:{T['text_dim']}; font-size:10px;")
+        self.selection_status.setStyleSheet(f"color:{T['text_dim']}; font-size:13px;")
         button_layout.addWidget(self.selection_status)
         button_layout.addStretch()
         right_layout.addWidget(button_row)
@@ -342,7 +427,7 @@ class TradingTerminal(QMainWindow):
         alerts_header_layout.setSpacing(6)
 
         alerts_label = QLabel("Swarm Alerts")
-        alerts_label.setStyleSheet(f"color:{T['text_bright']}; font-size:11px; font-weight:bold;")
+        alerts_label.setStyleSheet(f"color:{T['text_bright']}; font-size:16px; font-weight:bold;")
         alerts_header_layout.addWidget(alerts_label)
         alerts_header_layout.addStretch()
 
@@ -354,7 +439,7 @@ class TradingTerminal(QMainWindow):
         self.alerts_area = QTextEdit()
         self.alerts_area.setReadOnly(True)
         self.alerts_area.setStyleSheet(
-            f"background-color:{T['surface']}; border:1px solid {T['border']}; color:{T['text']}; padding:8px;"
+            f"background-color:{T['surface']}; border:1px solid {T['border']}; color:{T['text']}; padding:10px;"
         )
         right_layout.addWidget(self.alerts_area, 1)
 
@@ -366,11 +451,11 @@ class TradingTerminal(QMainWindow):
         self.main_tabs.addTab(backtest_tab, "Backtesting")
 
         layout = QVBoxLayout(backtest_tab)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
 
         heading = QLabel("Historical Backtest Metrics")
-        heading.setStyleSheet(f"color:{T['text_bright']}; font-size:14px; font-weight:bold;")
+        heading.setStyleSheet(f"color:{T['text_bright']}; font-size:22px; font-weight:bold;")
         layout.addWidget(heading)
 
         subtitle = QLabel(
@@ -378,41 +463,46 @@ class TradingTerminal(QMainWindow):
             "then either the 2% target or 1% stop is reached later in the historical data."
         )
         subtitle.setWordWrap(True)
-        subtitle.setStyleSheet(f"color:{T['text_dim']}; font-size:10px;")
+        subtitle.setStyleSheet(f"color:{T['text_dim']}; font-size:13px;")
         layout.addWidget(subtitle)
 
         summary_frame = QFrame()
         summary_frame.setStyleSheet(
-            f"background-color:{T['panel']}; border:1px solid {T['border']}; border-radius:4px;"
+            f"background-color:{T['panel']}; border:1px solid {T['border']}; border-radius:6px;"
         )
         summary_layout = QVBoxLayout(summary_frame)
-        summary_layout.setContentsMargins(12, 12, 12, 12)
-        summary_layout.setSpacing(6)
+        summary_layout.setContentsMargins(15, 15, 15, 15)
+        summary_layout.setSpacing(8)
 
         self.backtest_summary_label = QLabel("No backtest data loaded yet.")
         self.backtest_summary_label.setWordWrap(True)
-        self.backtest_summary_label.setStyleSheet(f"color:{T['text']}; font-size:11px;")
+        self.backtest_summary_label.setStyleSheet(f"color:{T['text']}; font-size:15px;")
         summary_layout.addWidget(self.backtest_summary_label)
 
         metrics_hint = QLabel(
             "Key metrics: win rate, total trades, expectancy per trade, average bars to exit, and streaks."
         )
         metrics_hint.setWordWrap(True)
-        metrics_hint.setStyleSheet(f"color:{T['text_dim']}; font-size:10px;")
+        metrics_hint.setStyleSheet(f"color:{T['text_dim']}; font-size:12px;")
         summary_layout.addWidget(metrics_hint)
         layout.addWidget(summary_frame)
 
         controls_row = QWidget()
         controls_layout = QHBoxLayout(controls_row)
         controls_layout.setContentsMargins(0, 0, 0, 0)
-        controls_layout.setSpacing(8)
+        controls_layout.setSpacing(10)
 
         self.refresh_backtest_button = QPushButton("REFRESH BACKTEST")
         self.refresh_backtest_button.clicked.connect(self.refresh_backtesting_tab)
         controls_layout.addWidget(self.refresh_backtest_button)
 
+        self.clear_backtest_button = QPushButton("CLEAR DATA")
+        self.clear_backtest_button.clicked.connect(self.clear_backtesting_data)
+        self.clear_backtest_button.setStyleSheet(f"color:{T['bear']};")
+        controls_layout.addWidget(self.clear_backtest_button)
+
         self.backtest_status_label = QLabel("Ready")
-        self.backtest_status_label.setStyleSheet(f"color:{T['text_dim']}; font-size:10px;")
+        self.backtest_status_label.setStyleSheet(f"color:{T['text_dim']}; font-size:13px;")
         controls_layout.addWidget(self.backtest_status_label)
         controls_layout.addStretch()
         layout.addWidget(controls_row)
@@ -598,6 +688,12 @@ class TradingTerminal(QMainWindow):
         )
         self.backtest_status_label.setText(f"Backtest updated for {len(rows)} symbol/pattern runs")
 
+    def clear_backtesting_data(self):
+        """Clears the backtesting table and summary labels."""
+        self.backtest_table.setRowCount(0)
+        self.backtest_summary_label.setText("No backtest data loaded yet.")
+        self.backtest_status_label.setText("Data cleared")
+
     def redraw_charts(self):
         if not self.candle_data:
             return
@@ -672,20 +768,20 @@ class TradingTerminal(QMainWindow):
         for alert in reversed(new_alerts):
             blocks.append(
                 f"""
-                <div style="margin:0 0 12px 0;padding:10px 12px;
-                    background:{T['surface']};border-left:3px solid {T['accent']};border-radius:0 3px 3px 0;">
-                  <div style="color:{T['accent']};font-size:10px;font-weight:bold;letter-spacing:1px;margin-bottom:6px;">
+                <div style="margin:0 0 16px 0;padding:12px 15px;
+                    background:{T['surface']};border-left:4px solid {T['accent']};border-radius:0 4px 4px 0;">
+                  <div style="color:{T['accent']};font-size:14px;font-weight:bold;letter-spacing:1px;margin-bottom:8px;">
                     {alert.get('symbol', '')} [{alert.get('pattern', 'ALERT')}]
                     <span style="color:{T['text_dim']};font-weight:normal;">[{alert.get('timestamp','')}]</span>
                   </div>
-                  <div style="margin-bottom:5px;"><span style="color:{T['bull']};font-weight:bold;">[PATTERN]</span>
-                    <span style="color:{T['text']};"> {alert.get('quant','')}</span>
+                  <div style="margin-bottom:6px;"><span style="color:{T['bull']};font-weight:bold;">[PATTERN]</span>
+                    <span style="color:{T['text']};font-size:13px;"> {alert.get('quant','')}</span>
                   </div>
-                  <div style="margin-bottom:5px;"><span style="color:{T['ema_fast']};font-weight:bold;">[RISK]</span>
-                    <span style="color:{T['text']};"> {alert.get('risk','')}</span>
+                  <div style="margin-bottom:6px;"><span style="color:{T['ema_fast']};font-weight:bold;">[RISK]</span>
+                    <span style="color:{T['text']};font-size:13px;"> {alert.get('risk','')}</span>
                   </div>
-                  <div style="margin-top:8px;padding-top:8px;border-top:1px solid {T['border']};
-                      color:{T['text_bright']};font-weight:bold;">
+                  <div style="margin-top:10px;padding-top:10px;border-top:1px solid {T['border']};
+                      color:{T['text_bright']};font-weight:bold;font-size:15px;">
                     {alert.get('synthesis','')}
                   </div>
                 </div>

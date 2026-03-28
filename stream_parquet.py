@@ -8,7 +8,7 @@ from confluent_kafka import Producer
 KAFKA_BROKER = 'localhost:9092'
 TOPIC = 'nse_live_candles'  # Changed topic name to reflect we are sending candles now
 DATA_DIR = 'parquet_data'
-STREAM_SPEED = 0.01  # Half a second per candle (Fast enough for a good demo)
+STREAM_SPEED = 0.0001
 START_SIGNAL_FILE = ".stream_start.signal"
 
 
@@ -44,6 +44,9 @@ def main():
         return
 
     master_df = pd.concat(all_dataframes, ignore_index=True)
+    
+    # Standardize timestamps to UTC to prevent comparison errors
+    master_df['timestamp'] = pd.to_datetime(master_df['timestamp'], utc=True)
     master_df.sort_values(by='timestamp', inplace=True)
 
     # --- THE 50/10 SPLIT LOGIC ---
