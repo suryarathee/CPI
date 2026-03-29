@@ -42,17 +42,25 @@ class BullishEngulfing(BasePattern):
         Parameters mirror BasePattern.evaluate().
         Newest candle is at index -1 (last element).
         """
-        # Guard: need at least 2 candles (previous + current)
-        if len(opens) < 2 or len(closes) < 2:
+        # Guard: need at least 50 candles for SMA 50 trend filter
+        if len(opens) < 50 or len(closes) < 50 or len(volumes) < 50:
             return False
+
+        # ── Trend Filter (SMA 50) ────────────────────────────────────
+        sma_50 = sum(closes[-50:]) / 50.0
 
         # ── Previous candle ──────────────────────────────────────────
         prev_open: float = opens[-2]
         prev_close: float = closes[-2]
+        prev_volume: float = volumes[-2]
 
         # ── Current candle ───────────────────────────────────────────
         curr_open: float = opens[-1]
         curr_close: float = closes[-1]
+        curr_volume: float = volumes[-1]
+
+        if curr_close <= sma_50:
+            return False
 
         # ── Pattern conditions ───────────────────────────────────────
         prev_bearish: bool = prev_close < prev_open
@@ -63,5 +71,8 @@ class BullishEngulfing(BasePattern):
             curr_open <= prev_close   # opens at or below prior close
             and curr_close >= prev_open  # closes at or above prior open
         )
+        
+        # Stricter: engulfing candle volume must be higher than previous bearish candle
+        volume_confirmed: bool = curr_volume > prev_volume
 
-        return prev_bearish and curr_bullish and curr_engulfs_prev
+        return prev_bearish and curr_bullish and curr_engulfs_prev and volume_confirmed

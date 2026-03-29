@@ -131,10 +131,16 @@ def enrich_indicator_frame(df: pd.DataFrame) -> pd.DataFrame:
     enriched["ROLLING_HIGH_20"] = enriched["High"].rolling(20).max().shift(1)
     enriched["ROLLING_CLOSE_10"] = close_series.rolling(10).mean()
 
+    # Stricter breakout logic with trend filter
+    range_size = enriched["High"] - enriched["Low"]
+    close_strength = (enriched["Close"] - enriched["Low"]) / range_size.replace(0, 1)
     enriched["VOLUME_BREAKOUT_SIGNAL"] = (
         (enriched["Close"] > enriched["ROLLING_HIGH_20"])
-        & (enriched["Volume"] > (enriched["AVG_VOL_20"] * 2.0))
+        & (enriched["Volume"] > (enriched["AVG_VOL_20"] * 2.5))
+        & (close_strength >= 0.75)
+        & (enriched["Close"] > enriched["EMA_50"])
     )
+
     enriched["EMA_MOMENTUM_SIGNAL"] = (
         (enriched["EMA_9"] > enriched["EMA_20"])
         & (enriched["EMA_20"] > enriched["EMA_50"])
@@ -147,6 +153,23 @@ def enrich_indicator_frame(df: pd.DataFrame) -> pd.DataFrame:
         & (enriched["Close"] > enriched["ROLLING_CLOSE_10"])
     )
 
+    # Bullish Engulfing Logic (Stricter with trend filter)
+    prev_close = enriched["Close"].shift(1)
+    prev_open = enriched["Open"].shift(1)
+    prev_volume = enriched["Volume"].shift(1)
+    curr_close = enriched["Close"]
+    curr_open = enriched["Open"]
+    curr_volume = enriched["Volume"]
+
+    enriched["BULLISH_ENGULFING_SIGNAL"] = (
+        (prev_close < prev_open)  # Prev candle bearish
+        & (curr_close > curr_open) # Curr candle bullish
+        & (curr_open <= prev_close) # Opens at or below prior close
+        & (curr_close >= prev_open) # Closes at or above prior open
+        & (curr_volume > prev_volume) # Volume confirmation
+        & (curr_close > enriched["EMA_50"]) # Trend filter
+    )
+
     return enriched
 
 
@@ -156,6 +179,7 @@ def pattern_signal_mask(df: pd.DataFrame, pattern_name: str) -> pd.Series:
         "VolumeBreakout": "VOLUME_BREAKOUT_SIGNAL",
         "EMAMomentum": "EMA_MOMENTUM_SIGNAL",
         "RSIMACDContinuation": "RSI_MACD_SIGNAL",
+        "BullishEngulfing": "BULLISH_ENGULFING_SIGNAL",
     }
     signal_column = signal_map.get(pattern_name)
     if signal_column is None:

@@ -54,33 +54,53 @@ def _load_history(symbol: str) -> pd.DataFrame:
 
 class PatternStrategy(Strategy):
     """
-    Executes a simple SL/TP trade when a pattern signal is detected.
-    Includes a time-based exit after 100 bars.
+    Executes a trade with dynamic ATR-based SL/TP when a pattern signal is detected.
+    Includes a trailing stop and a time-based exit after 50 bars.
     """
-    # Parameters for the strategy
-    stop_loss_pct = 0.015  # 1.5% SL
-    take_profit_pct = 0.03  # 3% TP
-    exit_bars = 50         # Exit after 50 bars (approx half trading day)
+    atr_multiplier_sl = 1.5
+    atr_multiplier_tp = 3.0
+    exit_bars = 50
 
     def init(self):
-        # Pre-calculated Signal column from the data
         self.signal = self.data.Signal
+        self.atr = self.data.ATR
         self.entry_idx = 0
+        self.highest_price = 0.0
 
     def next(self):
-        # 1. Check for time-based exit
+        # 1. Manage existing position
         if self.position:
+            current_price = self.data.Close[-1]
+            
+            # Trailing Stop Logic
+            if current_price > self.highest_price:
+                self.highest_price = current_price
+                # Calculate new potential stop loss based on highest price achieved
+                new_sl = self.highest_price - (self.atr[-1] * self.atr_multiplier_sl)
+                # Only move stop loss up (for long positions)
+                for trade in self.trades:
+                    if trade.is_long and getattr(trade, 'sl', 0) is not None:
+                        if new_sl > trade.sl:
+                            trade.sl = new_sl
+
+            # Time-based exit
             if len(self.data) - self.entry_idx >= self.exit_bars:
                 self.position.close()
             return
 
-        # 2. Only enter if not already in a position and a signal is triggered
+        # 2. Entry Logic
         if self.data.Signal[-1] > 0:
             price = self.data.Close[-1]
-            sl = price * (1 - self.stop_loss_pct)
-            tp = price * (1 + self.take_profit_pct)
+            current_atr = self.data.ATR[-1]
+            
+            if pd.isna(current_atr) or current_atr <= 0:
+                return
+
+            sl = price - (current_atr * self.atr_multiplier_sl)
+            tp = price + (current_atr * self.atr_multiplier_tp)
             self.buy(sl=sl, tp=tp)
             self.entry_idx = len(self.data)
+            self.highest_price = price
 
 def run_historical_backtest(symbol: str, pattern: BasePattern) -> dict:
     """
@@ -91,6 +111,16 @@ def run_historical_backtest(symbol: str, pattern: BasePattern) -> dict:
         if len(df) < 100: # Minimum data check
             return _empty_stats()
             
+        # Calculate ATR (Average True Range)
+        high = df['High']
+        low = df['Low']
+        close = df['Close']
+        tr1 = high - low
+        tr2 = (high - close.shift(1)).abs()
+        tr3 = (low - close.shift(1)).abs()
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        df['ATR'] = tr.rolling(14).mean()
+
         # 1. Optimized signal generation
         # We only need enough lookback for the pattern (max 50-100 bars)
         opens = df['Open'].tolist()

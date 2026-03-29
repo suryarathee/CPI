@@ -1,11 +1,1 @@
-[
-  {
-    "event_id": "RELIANCE:2026-03-25 05:25:00+00:00",
-    "symbol": "RELIANCE",
-    "pattern": "BullishEngulfing",
-    "timestamp": "2026-03-25 05:25:00+00:00",
-    "quant": "RELIANCE triggered BullishEngulfing near 1425.40 after screener and indicator confirmation.",
-    "risk": "Historical edge: Win Rate 0.00%, Return 0.00%, Max Drawdown 0.00%, Trades 0.",
-    "synthesis": "Trade only if risk is acceptable; a simple reference plan is stop near 1411.15 and target near 1453.91. ADK fallback engaged:"
-  }
-]
+[]

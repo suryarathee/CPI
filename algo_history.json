@@ -1,0 +1,71 @@
+[
+  {
+    "id": "9c60c56b-d7ff-47de-9da1-726d08351a6e",
+    "timestamp": "2026-03-29T10:58:33",
+    "prompt": "buy on volume breakout",
+    "symbol": "RELIANCE",
+    "model": "gemini-2.0-flash-lite-preview-02-05",
+    "code": "class GeneratedStrategy(Strategy):\n    def init(self):\n        close = self.data.Close\n        self.ema_fast = self.I(lambda x, n: pd.Series(x).ewm(span=n, adjust=False).mean().values, close, 9)\n        self.ema_slow = self.I(lambda x, n: pd.Series(x).ewm(span=n, adjust=False).mean().values, close, 21)\n\n    def next(self):\n        if crossover(self.ema_fast, self.ema_slow):\n            price = self.data.Close[-1]\n            self.buy(sl=price * 0.98, tp=price * 1.04)\n        elif crossover(self.ema_slow, self.ema_fast):\n            self.position.close()\n\n# ADK Fallback \u2014 error: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-2.0-flash-lite-preview-02-05 is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}",
+    "stats": {
+      "ok": true,
+      "symbol": "RELIANCE",
+      "total_trades": 66,
+      "win_rate": 0.24242424242424243,
+      "win_rate_pct": 24.242424242424242,
+      "return_pct": -5.028285931240171,
+      "expectancy_pct": -0.07387673580407957,
+      "sharpe_ratio": -1.7553325709233545,
+      "max_drawdown_pct": -10.922436371269361,
+      "final_equity": 94971.71406875983,
+      "max_win_streak": 2,
+      "max_loss_streak": 9,
+      "code_preview": "class GeneratedStrategy(Strategy):\n    def init(self):\n        close = self.data.Close\n        self.ema_fast = self.I(lambda x, n: pd.Series(x).ewm(span=n, adjust=False).mean().values, close, 9)\n     "
+    }
+  },
+  {
+    "id": "5c33d805-1074-4038-86c4-d572ba8c2703",
+    "timestamp": "2026-03-29T11:18:06",
+    "prompt": "buy on volume breakout",
+    "symbol": "RELIANCE",
+    "model": "gemini-2.0-flash-lite-preview-02-05",
+    "code": "",
+    "stats": {
+      "ok": true,
+      "symbol": "RELIANCE",
+      "total_trades": 66,
+      "win_rate": 0.24242424242424243,
+      "win_rate_pct": 24.242424242424242,
+      "return_pct": -5.028285931240171,
+      "expectancy_pct": -0.07387673580407957,
+      "sharpe_ratio": -1.7553325709233545,
+      "max_drawdown_pct": -10.922436371269361,
+      "final_equity": 94971.71406875983,
+      "max_win_streak": 2,
+      "max_loss_streak": 9,
+      "code_preview": "class GeneratedStrategy(Strategy):\n    def init(self):\n        close = self.data.Close\n        self.ema_fast = self.I(lambda x, n: pd.Series(x).ewm(span=n, adjust=False).mean().values, close, 9)\n     "
+    }
+  },
+  {
+    "id": "f272bf5d-c296-4c6a-a92b-9fb226cdbcee",
+    "timestamp": "2026-03-29T11:23:09",
+    "prompt": "hey",
+    "symbol": "RELIANCE",
+    "model": "gemini-2.0-flash-lite-preview-02-05",
+    "code": "class GeneratedStrategy(Strategy):\n    def init(self):\n        close = self.data.Close\n        self.ema_fast = self.I(lambda x, n: pd.Series(x).ewm(span=n, adjust=False).mean().values, close, 9)\n        self.ema_slow = self.I(lambda x, n: pd.Series(x).ewm(span=n, adjust=False).mean().values, close, 21)\n\n    def next(self):\n        if crossover(self.ema_fast, self.ema_slow):\n            price = self.data.Close[-1]\n            self.buy(sl=price * 0.98, tp=price * 1.04)\n        elif crossover(self.ema_slow, self.ema_fast):\n            self.position.close()\n\n# ADK Fallback \u2014 error: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-2.0-flash-lite-preview-02-05 is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}",
+    "stats": {
+      "ok": true,
+      "symbol": "RELIANCE",
+      "total_trades": 66,
+      "win_rate": 0.24242424242424243,
+      "win_rate_pct": 24.242424242424242,
+      "return_pct": -5.028285931240171,
+      "expectancy_pct": -0.07387673580407957,
+      "sharpe_ratio": -1.7553325709233545,
+      "max_drawdown_pct": -10.922436371269361,
+      "final_equity": 94971.71406875983,
+      "max_win_streak": 2,
+      "max_loss_streak": 9,
+      "code_preview": "class GeneratedStrategy(Strategy):\n    def init(self):\n        close = self.data.Close\n        self.ema_fast = self.I(lambda x, n: pd.Series(x).ewm(span=n, adjust=False).mean().values, close, 9)\n     "
+    }
+  }
+]

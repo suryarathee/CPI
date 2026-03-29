@@ -42,13 +42,22 @@ class VolumeBreakout(BasePattern):
         Parameters mirror BasePattern.evaluate().
         Newest candle is at index -1 (last element).
         """
-        # Guard: need at least LOOKBACK previous candles + 1 current candle
-        if len(closes) < LOOKBACK + 1 or len(volumes) < LOOKBACK + 1:
+        # Guard: need at least 50 candles for SMA 50 and LOOKBACK
+        if len(closes) < 50 or len(volumes) < 50 or len(highs) < 50 or len(lows) < 50:
             return False
 
+        # ── Trend Filter (SMA 50) ────────────────────────────────────
+        sma_50 = sum(closes[-50:]) / 50.0
+        
         # ── Current candle (index -1) ────────────────────────────────
         current_close: float = closes[-1]
+        current_high: float = highs[-1]
+        current_low: float = lows[-1]
         current_volume: float = volumes[-1]
+
+        # Breakout trend filter
+        if current_close <= sma_50:
+            return False
 
         # ── Previous LOOKBACK candles (indices -(LOOKBACK+1) to -2) ──
         prev_highs: list = highs[-(LOOKBACK + 1):-1]
@@ -60,5 +69,10 @@ class VolumeBreakout(BasePattern):
         # ── Pattern conditions ───────────────────────────────────────
         price_breakout: bool = current_close > resistance
         volume_confirmed: bool = current_volume > VOLUME_MULTIPLIER * avg_volume
+        
+        # Stricter: must close in upper 25% of candle range
+        range_size = current_high - current_low
+        close_strength = (current_close - current_low) / range_size if range_size > 0 else 0
+        strong_close: bool = close_strength >= 0.75
 
-        return price_breakout and volume_confirmed
+        return price_breakout and volume_confirmed and strong_close
